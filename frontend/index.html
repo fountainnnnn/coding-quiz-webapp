@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>JavaScript Quiz App</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <!-- HERO -->
+  <header class="hero">
+    <div class="hero-inner">
+      <h1>OpenAI Quiz App</h1>
+      <p>Challenge yourself on Loops, Arrays, and Functions.</p>
+    </div>
+  </header>
+
+  <!-- SETUP FORM -->
+  <main class="quiz-section">
+    <div id="setup-card" class="quiz-card">
+      <h2>Start Your Quiz</h2>
+      <label for="topic">Choose Topic:</label>
+      <select id="topic" class="input-select">
+        <option value="loops">Loops</option>
+        <option value="arrays">Arrays</option>
+        <option value="functions">Functions</option>
+      </select>
+
+      <label for="difficulty">Difficulty:</label>
+      <select id="difficulty" class="input-select">
+        <option value="easy">Easy</option>
+        <option value="mixed" selected>Mixed</option>
+        <option value="hard">Hard</option>
+      </select>
+
+      <button id="start-btn" class="btn btn-primary">Start Quiz</button>
+    </div>
+
+    <!-- QUIZ -->
+    <div id="quiz-container" class="quiz-card hidden">
+      <div class="quiz-header">
+        <h2 id="question-text"></h2>
+        <pre id="code-block" class="code-block hidden"></pre>
+      </div>
+
+      <div id="options" class="options"></div>
+
+      <!-- Drag & Drop Area -->
+      <div id="dragdrop-zone" class="dragdrop-zone hidden"></div>
+
+      <!-- Submit Button separated -->
+      <div id="dragdrop-actions" class="quiz-actions hidden">
+        <button id="submit-order-btn" class="btn btn-primary">Submit Order</button>
+      </div>
+
+      <div id="feedback" class="feedback hidden"></div>
+    </div>
+
+    <!-- RESULT -->
+    <div id="result-card" class="quiz-card hidden">
+      <h2>Quiz Complete 🎉</h2>
+      <p id="score-text"></p>
+      <button id="restart-btn" class="btn btn-primary">Restart Quiz</button>
+    </div>
+  </main>
+
+  <!-- LOADING OVERLAY -->
+  <div id="loading-overlay" class="loading-overlay hidden">
+    <div class="spinner"></div>
+    <p>Generating questions...</p>
+  </div>
+
+  <!-- FOOTER -->
+  <footer>
+    <p>© <span id="year"></span> JavaScript Quiz App — Built with FastAPI & OpenAI</p>
+  </footer>
+
+  <script src="app.js" defer></script>
+</body>
+</html>
