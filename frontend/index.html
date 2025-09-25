@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>JavaScript Quiz App</title>
+  <title>OpenAI Quiz App</title>
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
@@ -11,7 +11,7 @@
   <header class="hero">
     <div class="hero-inner">
       <h1>OpenAI Quiz App</h1>
-      <p>Challenge yourself on Loops, Arrays, and Functions.</p>
+      <p>Challenge yourself with coding questions across multiple languages.</p>
     </div>
   </header>
 
@@ -19,19 +19,48 @@
   <main class="quiz-section">
     <div id="setup-card" class="quiz-card">
       <h2>Start Your Quiz</h2>
+
+      <!-- Language -->
+      <label for="language">Choose Language:</label>
+      <select id="language" class="input-select">
+        <option value="javascript" selected>JavaScript</option>
+        <option value="python">Python</option>
+        <option value="cpp">C++</option>
+      </select>
+
+      <!-- Topic -->
       <label for="topic">Choose Topic:</label>
       <select id="topic" class="input-select">
         <option value="loops">Loops</option>
         <option value="arrays">Arrays</option>
         <option value="functions">Functions</option>
+        <option value="conditionals">Conditionals</option>
+        <option value="objects">Objects</option>
+        <option value="classes">Classes</option>
       </select>
 
+      <!-- Difficulty -->
       <label for="difficulty">Difficulty:</label>
       <select id="difficulty" class="input-select">
         <option value="easy">Easy</option>
         <option value="mixed" selected>Mixed</option>
         <option value="hard">Hard</option>
       </select>
+
+      <!-- Number of Questions -->
+      <label for="num-questions">Number of Questions: 
+        <span id="numOutput">10</span>
+      </label>
+      <input 
+        type="range" 
+        id="num-questions" 
+        class="input-range" 
+        min="5" 
+        max="20" 
+        step="1"
+        value="10" 
+        oninput="numOutput.textContent = this.value"
+      />
 
       <button id="start-btn" class="btn btn-primary">Start Quiz</button>
     </div>
@@ -40,6 +69,7 @@
     <div id="quiz-container" class="quiz-card hidden">
       <div class="quiz-header">
         <h2 id="question-text"></h2>
+        <!-- Editable blanks will be injected inside this pre -->
         <pre id="code-block" class="code-block hidden"></pre>
       </div>
 
@@ -71,8 +101,8 @@
   </div>
 
   <!-- FOOTER -->
-  <footer>
-    <p>© <span id="year"></span> JavaScript Quiz App — Built with FastAPI & OpenAI</p>
+  <footer role="contentinfo">
+    <p>© <span id="year"></span> OpenAI Quiz App — Built with FastAPI & OpenAI</p>
   </footer>
 
   <script src="app.js" defer></script>

@@ -24,7 +24,7 @@ load_dotenv()
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger("quiz")
 
-app = FastAPI(title="JavaScript Quiz API")
+app = FastAPI(title="Multi-Language Quiz API")
 
 app.add_middleware(
     CORSMiddleware,
@@ -38,14 +38,17 @@ class LogRequestMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
         try:
             body = await request.body()
-            logger.info(f"Incoming {request.method} {request.url.path} body={body.decode('utf-8')}")
+            logger.info(
+                f"Incoming {request.method} {request.url.path} body={body.decode('utf-8')}"
+            )
         except Exception:
             logger.warning("Could not read request body")
         return await call_next(request)
 
 app.add_middleware(LogRequestMiddleware)
 
-# In-memory store for answers: { session_id: { qid: {answer, explanation} } }
+# In-memory store for answers:
+# { session_id: { qid: {answer, explanation, language} } }
 SESSION_STORE: dict[str, dict[str, dict]] = {}
 
 # ------------------------------------------------------------
@@ -54,6 +57,22 @@ SESSION_STORE: dict[str, dict[str, dict]] = {}
 def normalize(s: str) -> str:
     """Lowercase and collapse whitespace for fair comparison."""
     return " ".join(str(s).strip().lower().split())
+
+def normalize_answer(expected, user):
+    """Coerce both expected and user answers to normalized lists of strings."""
+    if not isinstance(expected, list):
+        expected = [str(expected)]
+    else:
+        expected = [str(x) for x in expected]
+
+    if not isinstance(user, list):
+        user = [str(user)]
+    else:
+        user = [str(x) for x in user]
+
+    expected_norm = [normalize(x) for x in expected]
+    user_norm = [normalize(x) for x in user]
+    return expected_norm, user_norm
 
 # ------------------------------------------------------------
 # Exception handlers
@@ -84,7 +103,12 @@ async def global_exception_handler(request: Request, exc: Exception):
 @app.post("/generate_questions", response_model=GenerateResponse)
 def generate_questions_route(req: GenerateRequest):
     try:
-        result = generate_questions(req.topic, req.difficulty, req.n)
+        result = generate_questions(
+            topic=req.topic,
+            difficulty=req.difficulty,
+            n=req.n,
+            language=req.language,  # <-- new
+        )
     except RuntimeError as e:
         logger.error(f"RuntimeError: {e}")
         return JSONResponse(
@@ -103,10 +127,13 @@ def generate_questions_route(req: GenerateRequest):
         SESSION_STORE[session_id][item["question_id"]] = {
             "answer": item["answer"],
             "explanation": item["explanation"],
+            "language": req.language,
         }
         logger.debug(f"Stored qid={item['question_id']} for session={session_id}")
 
-    logger.debug(f"Session {session_id} has {len(SESSION_STORE[session_id])} questions stored")
+    logger.debug(
+        f"Session {session_id} has {len(SESSION_STORE[session_id])} questions stored"
+    )
 
     return {"status": "ok", "session_id": session_id, "questions": result["safe"]}
 
@@ -116,24 +143,22 @@ def check_answer(req: AnswerRequest):
     record = SESSION_STORE.get(session_id, {}).get(req.question_id)
 
     if not record:
-        logger.warning(f"Question not found for session={session_id}, qid={req.question_id}")
+        logger.warning(
+            f"Question not found for session={session_id}, qid={req.question_id}"
+        )
         raise HTTPException(status_code=404, detail="Question not found or expired")
 
     expected = record["answer"]
     user_ans = req.user_answer
+    lang = record.get("language", "javascript")
+
     logger.debug(
         f"Checking answer for session={session_id}, qid={req.question_id}, "
-        f"expected={expected}, user={user_ans}"
+        f"lang={lang}, expected={expected}, user={user_ans}"
     )
 
-    correct = False
-    if isinstance(expected, list):
-        if isinstance(user_ans, list):
-            correct = [normalize(x) for x in user_ans] == [normalize(x) for x in expected]
-        else:
-            correct = normalize(user_ans) in [normalize(x) for x in expected]
-    else:
-        correct = normalize(user_ans) == normalize(expected)
+    expected_norm, user_norm = normalize_answer(expected, user_ans)
+    correct = user_norm == expected_norm
 
     return {
         "status": "ok",

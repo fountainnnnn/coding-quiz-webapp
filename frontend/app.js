@@ -7,6 +7,8 @@ document.addEventListener("DOMContentLoaded", () => {
   const startBtn = document.getElementById("start-btn");
   const topicSelect = document.getElementById("topic");
   const difficultySelect = document.getElementById("difficulty");
+  const languageSelect = document.getElementById("language");
+  const numQuestionsInput = document.getElementById("num-questions");
 
   const quizContainer = document.getElementById("quiz-container");
   const resultCard = document.getElementById("result-card");
@@ -29,15 +31,21 @@ document.addEventListener("DOMContentLoaded", () => {
   let questions = [];
   let currentIndex = 0;
   let score = 0;
+  let locked = false; // prevent multiple answers after correct
 
-  // Load quiz (10 questions)
-  async function loadQuiz(topic, difficulty) {
+  // Load quiz
+  async function loadQuiz(language, topic, difficulty, numQuestions) {
     loadingOverlay.classList.remove("hidden");
     try {
       const res = await fetch(`${BACKEND_BASE_URL}/generate_questions`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ topic, difficulty, n: 10 }),
+        body: JSON.stringify({
+          language,
+          topic,
+          difficulty,
+          n: numQuestions,
+        }),
       });
 
       const data = await res.json();
@@ -45,7 +53,7 @@ document.addEventListener("DOMContentLoaded", () => {
         throw new Error(data.detail || data.message || "Failed to load questions");
       }
 
-      sessionId = data.session_id; // store session ID
+      sessionId = data.session_id;
       questions = data.questions;
       currentIndex = 0;
       score = 0;
@@ -70,6 +78,7 @@ document.addEventListener("DOMContentLoaded", () => {
     const q = questions[currentIndex];
 
     // Reset UI
+    locked = false; // reset lock per question
     feedbackEl.classList.add("hidden");
     feedbackEl.textContent = "";
     codeBlock.classList.add("hidden");
@@ -78,37 +87,67 @@ document.addEventListener("DOMContentLoaded", () => {
     dragZone.classList.add("hidden");
     dragActions.classList.add("hidden");
 
-    // Render question text
-    questionText.textContent = q.question || "";
+    // Render question text with numbering
+    questionText.textContent = `Q${currentIndex + 1}/${questions.length}: ${q.question || ""}`;
 
-    // Code block
-    if (q.code_with_blanks) {
-      codeBlock.textContent = q.code_with_blanks;
+    // Code block rendering
+    if (q.type === "fill_code" && q.code_with_blanks) {
+      const codeHTML = q.code_with_blanks.replace(/___/g, () => {
+        return `<span class="blank" contenteditable="true" data-blank></span>`;
+      });
+      codeBlock.innerHTML = `<code>${codeHTML}</code>`;
       codeBlock.classList.remove("hidden");
-    }
 
-    // Render by type
-    if (q.type === "mcq" && Array.isArray(q.options)) {
+      const submitBtn = document.createElement("button");
+      submitBtn.className = "btn btn-primary mt-2";
+      submitBtn.textContent = "Submit";
+      submitBtn.addEventListener("click", () => {
+        if (!locked) {
+          const blanks = [...codeBlock.querySelectorAll("[data-blank]")].map(
+            (el) => el.innerText.trim()
+          );
+          submitAnswer(blanks);
+        }
+      });
+      optionsDiv.appendChild(submitBtn);
+
+      // Auto-expand blanks
+      codeBlock.querySelectorAll("[data-blank]").forEach((el) => {
+        el.addEventListener("keydown", (e) => {
+          if (e.key === "Enter") {
+            e.preventDefault();
+            submitBtn.click();
+          }
+        });
+
+        const resize = () => {
+          const span = document.createElement("span");
+          span.style.visibility = "hidden";
+          span.style.position = "absolute";
+          span.style.whiteSpace = "pre";
+          span.style.font = getComputedStyle(el).font;
+          span.textContent = el.textContent || "___";
+          document.body.appendChild(span);
+          el.style.width = span.offsetWidth + 20 + "px";
+          span.remove();
+        };
+        el.addEventListener("input", resize);
+        resize();
+      });
+    } else if (q.type === "mcq" && Array.isArray(q.options)) {
+      if (q.code_with_blanks) {
+        codeBlock.textContent = q.code_with_blanks;
+        codeBlock.classList.remove("hidden");
+      }
       q.options.forEach((opt) => {
         const btn = document.createElement("button");
         btn.className = "option-btn";
         btn.textContent = opt;
-        btn.addEventListener("click", () => submitAnswer(opt));
+        btn.addEventListener("click", () => {
+          if (!locked) submitAnswer(opt, btn);
+        });
         optionsDiv.appendChild(btn);
       });
-    } else if (q.type === "fill_code") {
-      const input = document.createElement("input");
-      input.type = "text";
-      input.className = "form-control";
-      input.placeholder = "Fill in the blank...";
-      const submitBtn = document.createElement("button");
-      submitBtn.className = "btn btn-primary mt-2";
-      submitBtn.textContent = "Submit";
-      submitBtn.addEventListener("click", () =>
-        submitAnswer(input.value)
-      );
-      optionsDiv.appendChild(input);
-      optionsDiv.appendChild(submitBtn);
     } else if (q.type === "drag_drop" && Array.isArray(q.options)) {
       dragZone.classList.remove("hidden");
       dragActions.classList.remove("hidden");
@@ -123,12 +162,13 @@ document.addEventListener("DOMContentLoaded", () => {
 
       enableDragAndDrop();
 
-      // bind submit order button
       submitOrderBtn.onclick = () => {
-        const order = [...dragZone.querySelectorAll(".draggable")].map(
-          (el) => el.textContent
-        );
-        submitAnswer(order);
+        if (!locked) {
+          const order = [...dragZone.querySelectorAll(".draggable")].map(
+            (el) => el.textContent
+          );
+          submitAnswer(order);
+        }
       };
     }
   }
@@ -136,6 +176,14 @@ document.addEventListener("DOMContentLoaded", () => {
   // Drag & drop support
   function enableDragAndDrop() {
     let dragged = null;
+    let placeholder = document.createElement("div");
+    placeholder.className = "drag-placeholder";
+
+    function cleanupPlaceholder() {
+      const existing = dragZone.querySelector(".drag-placeholder");
+      if (existing) existing.remove();
+    }
+
     dragZone.querySelectorAll(".draggable").forEach((el) => {
       el.addEventListener("dragstart", () => {
         dragged = el;
@@ -144,31 +192,64 @@ document.addEventListener("DOMContentLoaded", () => {
       el.addEventListener("dragend", () => {
         dragged.classList.remove("hidden");
         dragged = null;
+        cleanupPlaceholder();
+        dragZone.classList.remove("dragover");
       });
     });
-    dragZone.addEventListener("dragover", (e) => e.preventDefault());
+
+    dragZone.addEventListener("dragover", (e) => {
+      e.preventDefault();
+      dragZone.classList.add("dragover");
+      cleanupPlaceholder();
+
+      const draggables = [...dragZone.querySelectorAll(".draggable:not(.hidden)")];
+      let placed = false;
+
+      for (const target of draggables) {
+        const box = target.getBoundingClientRect();
+        const offset = e.clientX - box.left;
+        if (offset < box.width * 0.7) {
+          dragZone.insertBefore(placeholder, target);
+          placed = true;
+          break;
+        }
+      }
+
+      if (!placed) {
+        dragZone.appendChild(placeholder);
+      }
+    });
+
+    dragZone.addEventListener("dragleave", (e) => {
+      if (!dragZone.contains(e.relatedTarget)) {
+        dragZone.classList.remove("dragover");
+        cleanupPlaceholder();
+      }
+    });
+
     dragZone.addEventListener("drop", (e) => {
       e.preventDefault();
+      dragZone.classList.remove("dragover");
       if (dragged) {
-        const target = e.target.closest(".draggable");
-        if (target) {
-          dragZone.insertBefore(dragged, target);
+        if (placeholder.parentNode) {
+          dragZone.insertBefore(dragged, placeholder);
         } else {
           dragZone.appendChild(dragged);
         }
       }
+      cleanupPlaceholder();
     });
   }
 
   // Submit answer
-  async function submitAnswer(ans) {
+  async function submitAnswer(ans, clickedBtn = null) {
     const q = questions[currentIndex];
     try {
       const res = await fetch(`${BACKEND_BASE_URL}/check_answer`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          session_id: sessionId, // always send session_id
+          session_id: sessionId,
           question_id: q.question_id,
           user_answer: ans,
         }),
@@ -182,6 +263,8 @@ document.addEventListener("DOMContentLoaded", () => {
       const correct = data.correct;
       if (correct) {
         score++;
+        locked = true; // 🔒 lock once correct
+        if (clickedBtn) clickedBtn.classList.add("correct");
         feedbackEl.classList.remove("hidden");
         feedbackEl.className = "feedback success";
         feedbackEl.textContent = `✅ Correct! ${data.explanation}`;
@@ -190,10 +273,10 @@ document.addEventListener("DOMContentLoaded", () => {
           showQuestion();
         }, 1500);
       } else {
+        if (clickedBtn) clickedBtn.classList.add("incorrect");
         feedbackEl.classList.remove("hidden");
         feedbackEl.className = "feedback error";
         feedbackEl.textContent = `❌ Incorrect. Try again.`;
-        // stay on same question
       }
     } catch (err) {
       console.error("Answer submit error:", err);
@@ -207,14 +290,17 @@ document.addEventListener("DOMContentLoaded", () => {
   function showResults() {
     quizContainer.classList.add("hidden");
     resultCard.classList.remove("hidden");
-    scoreText.textContent = `You scored ${score} / ${questions.length}`;
+    scoreText.textContent = `You scored ${score} out of ${questions.length} questions.`;
   }
 
   // Events
   startBtn.addEventListener("click", () => {
+    const language = languageSelect.value;
     const topic = topicSelect.value;
     const difficulty = difficultySelect.value;
-    loadQuiz(topic, difficulty);
+    const numQuestions = parseInt(numQuestionsInput.value, 10) || 10;
+
+    loadQuiz(language, topic, difficulty, numQuestions);
   });
 
   restartBtn.addEventListener("click", () => {
