@@ -31,6 +31,7 @@
       <!-- Topic -->
       <label for="topic">Choose Topic:</label>
       <select id="topic" class="input-select">
+        <option value="mixed" selected>Mixed</option>
         <option value="loops">Loops</option>
         <option value="arrays">Arrays</option>
         <option value="functions">Functions</option>
@@ -49,14 +50,14 @@
 
       <!-- Number of Questions -->
       <label for="num-questions">Number of Questions: 
-        <span id="numOutput">10</span>
+        <span id="numOutput">10</span> (max 30)
       </label>
       <input 
         type="range" 
         id="num-questions" 
         class="input-range" 
         min="5" 
-        max="20" 
+        max="30" 
         step="1"
         value="10" 
         oninput="numOutput.textContent = this.value"
